@@ -2,35 +2,39 @@ import numpy as np
 import requests
 from sklearn.preprocessing import MinMaxScaler
 try:
-    # TensorFlow 2.x approach
     from tensorflow.keras.models import Sequential, load_model
     from tensorflow.keras.layers import Dense, LSTM
 except ImportError:
-    # Fallback for standalone Keras or older TF
     from keras.models import Sequential, load_model
     from keras.layers import Dense, LSTM
 import warnings
 import os
 import datetime
-import joblib # For saving/loading the scaler
+import joblib
 
 # --- Configuration ---
-MODEL_FILENAME = "lstm_ohlc_predictor_7day.h5"
-SCALER_FILENAME = "ohlc_scaler_7day.pkl"
-TIMESTAMP_FILENAME = "model_last_trained_7day.txt"
+MODEL_FILENAME = "lstm_ohlc_predictor_7day_weighted.h5" # New filename
+SCALER_FILENAME = "ohlc_scaler_7day_weighted.pkl"   # New filename
+TIMESTAMP_FILENAME = "model_last_trained_7day_weighted.txt" # New filename
 RETRAIN_INTERVAL_DAYS = 7
 TIMESTEPS = 7
 API_URL = "http://140.116.86.242:8081/api/stock/get_stock_history_data_for_ce_bot"
-FEATURES = ['Open', 'High', 'Low', 'Close'] # Order matters!
-TARGET_FEATURES = ['Open', 'Close'] # Features to predict
+FEATURES = ['Open', 'High', 'Low', 'Close']
+TARGET_FEATURES = ['Open', 'Close']
+
+# --- NEW: Sample Weight Configuration ---
+USE_SAMPLE_WEIGHTING = True # Set to False to disable weighting
+# Linear weighting: Assign weights linearly from min to max
+MIN_SAMPLE_WEIGHT = 0.5    # Weight for the oldest sample in the training set
+MAX_SAMPLE_WEIGHT = 1.5    # Weight for the most recent sample in the training set
 
 # Suppress warnings
 warnings.filterwarnings('ignore', category=FutureWarning)
 warnings.filterwarnings('ignore', category=UserWarning, module='sklearn')
 # os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2'
 
-# --- Helper Functions ---
-
+# --- Helper Functions (get_stock_data_from_api, prepare_lstm_data, build_lstm_model remain the same) ---
+# ... (Copy the previous helper functions here) ...
 def get_stock_data_from_api(url):
     """Fetches and preprocesses stock data from the API."""
     print("正在從 API 獲取歷史數據...")
@@ -96,8 +100,9 @@ def build_lstm_model(input_shape, output_units):
     model.summary() # Print model summary
     return model
 
+# --- Modified Training Function ---
 def train_and_save_model(data, model_path, scaler_path, timestamp_path):
-    """Trains the LSTM model, saves it, the scaler, and the timestamp."""
+    """Trains the LSTM model with optional sample weighting, saves it, the scaler, and the timestamp."""
     print("開始模型訓練流程...")
     # 1. Scale Data
     scaler = MinMaxScaler(feature_range=(0, 1))
@@ -105,20 +110,34 @@ def train_and_save_model(data, model_path, scaler_path, timestamp_path):
     print("數據標準化完成。")
 
     # 2. Prepare Data for LSTM
-    target_indices = [FEATURES.index(f) for f in TARGET_FEATURES] # Get indices of Open and Close
+    target_indices = [FEATURES.index(f) for f in TARGET_FEATURES]
     X_train, y_train = prepare_lstm_data(scaled_data, target_indices)
     if X_train is None:
         return None, None # Training failed
+
+    # --- NEW: Calculate Sample Weights ---
+    sample_weights = None # Initialize as None
+    if USE_SAMPLE_WEIGHTING:
+        num_samples = X_train.shape[0]
+        print(f"啟用樣本權重。為 {num_samples} 個樣本計算線性權重 (從 {MIN_SAMPLE_WEIGHT} 到 {MAX_SAMPLE_WEIGHT})...")
+        # Create linearly increasing weights from MIN to MAX
+        sample_weights = np.linspace(MIN_SAMPLE_WEIGHT, MAX_SAMPLE_WEIGHT, num_samples)
+        print(f"樣本權重陣列形狀: {sample_weights.shape}")
+    # ------------------------------------
 
     # 3. Build Model
     num_features = data.shape[1]
     num_target_features = len(TARGET_FEATURES)
     model = build_lstm_model(input_shape=(TIMESTEPS, num_features), output_units=num_target_features)
 
-    # 4. Train Model
+    # 4. Train Model --- MODIFIED to include sample_weight ---
     print("正在訓練 LSTM 模型...")
-    # Reduced epochs as it might be retrained periodically
-    model.fit(X_train, y_train, batch_size=32, epochs=50, verbose=1)
+    model.fit(X_train,
+              y_train,
+              batch_size=32,
+              epochs=50, # Epochs might need adjustment with weights
+              verbose=1,
+              sample_weight=sample_weights) # Pass weights here
     print("模型訓練完成。")
 
     # 5. Save Model, Scaler, and Timestamp
@@ -135,27 +154,32 @@ def train_and_save_model(data, model_path, scaler_path, timestamp_path):
         print(f"錯誤：儲存模型/Scaler/時間戳失敗 - {e}")
         return None, None
 
-# --- Main Prediction Function ---
-
+# --- Main Prediction Function (predict_next_open_close remains largely the same, but uses new filenames) ---
 def predict_next_open_close(force_retrain=False):
     """
     Predicts next day's Open and Close prices.
     Loads existing model if recent, otherwise retrains every RETRAIN_INTERVAL_DAYS.
+    Uses weighted training if enabled.
     """
     model = None
     scaler = None
     retrain_needed = False
 
-    # 1. Check if model needs retraining
+    # Use the new filenames defined in configuration
+    current_model_filename = MODEL_FILENAME
+    current_scaler_filename = SCALER_FILENAME
+    current_timestamp_filename = TIMESTAMP_FILENAME
+
+    # 1. Check if model needs retraining (Logic remains the same)
     if force_retrain:
         print("強制重新訓練模型。")
         retrain_needed = True
-    elif not os.path.exists(MODEL_FILENAME) or not os.path.exists(SCALER_FILENAME) or not os.path.exists(TIMESTAMP_FILENAME):
+    elif not os.path.exists(current_model_filename) or not os.path.exists(current_scaler_filename) or not os.path.exists(current_timestamp_filename):
         print("模型、Scaler 或時間戳文件不存在，需要訓練新模型。")
         retrain_needed = True
     else:
         try:
-            with open(TIMESTAMP_FILENAME, 'r') as f:
+            with open(current_timestamp_filename, 'r') as f:
                 last_trained_time = datetime.datetime.fromisoformat(f.read())
             time_since_last_train = datetime.datetime.now() - last_trained_time
             if time_since_last_train.days >= RETRAIN_INTERVAL_DAYS:
@@ -167,79 +191,62 @@ def predict_next_open_close(force_retrain=False):
             print(f"錯誤：讀取時間戳失敗，將重新訓練模型 - {e}")
             retrain_needed = True
 
-    # 2. Train or Load Model and Scaler
+    # 2. Train or Load Model and Scaler (Logic remains the same, uses train_and_save_model which now handles weights)
     if retrain_needed:
         ohlc_data = get_stock_data_from_api(API_URL)
         if ohlc_data is None:
-            return None, None # Exit if data fetching fails
-        model, scaler = train_and_save_model(ohlc_data, MODEL_FILENAME, SCALER_FILENAME, TIMESTAMP_FILENAME)
+            return None, None
+        model, scaler = train_and_save_model(ohlc_data, current_model_filename, current_scaler_filename, current_timestamp_filename)
         if model is None:
             print("模型訓練失敗。")
             return None, None
     else:
         try:
             print("正在載入現有模型和 Scaler...")
-            model = load_model(MODEL_FILENAME)
-            scaler = joblib.load(SCALER_FILENAME)
+            model = load_model(current_model_filename)
+            scaler = joblib.load(current_scaler_filename)
             print("模型和 Scaler 載入成功。")
         except Exception as e:
             print(f"錯誤：載入模型或 Scaler 失敗，將嘗試重新訓練 - {e}")
-            # Fallback to retraining if loading fails
             ohlc_data = get_stock_data_from_api(API_URL)
             if ohlc_data is None:
                  return None, None
-            model, scaler = train_and_save_model(ohlc_data, MODEL_FILENAME, SCALER_FILENAME, TIMESTAMP_FILENAME)
+            model, scaler = train_and_save_model(ohlc_data, current_model_filename, current_scaler_filename, current_timestamp_filename)
             if model is None:
                 print("模型重新訓練失敗。")
                 return None, None
 
-    # 3. Prepare Data for Prediction
-    # Fetch data again ONLY IF NOT just retrained (to get latest for prediction)
+    # 3. Prepare Data for Prediction (Logic remains the same)
     if not retrain_needed:
          ohlc_data = get_stock_data_from_api(API_URL)
          if ohlc_data is None:
              print("無法獲取最新數據進行預測。")
              return None, None
-    elif ohlc_data is None: # Should not happen if retrain was successful, but safety check
+    elif ohlc_data is None:
         print("數據不可用，無法預測。")
         return None, None
 
-    # Take the last TIMESTEPS data points
     last_sequence = ohlc_data[-TIMESTEPS:]
     if last_sequence.shape[0] < TIMESTEPS:
         print(f"錯誤：最新數據序列長度不足 {TIMESTEPS}。")
         return None, None
 
-    # Scale the input sequence using the loaded/trained scaler
     last_sequence_scaled = scaler.transform(last_sequence)
-
-    # Reshape for LSTM input (1 sample, TIMESTEPS, num_features)
     prediction_input = np.reshape(last_sequence_scaled, (1, TIMESTEPS, ohlc_data.shape[1]))
 
-    # 4. Make Prediction
+    # 4. Make Prediction (Logic remains the same)
     print("正在預測下一天開盤價和收盤價...")
-    predicted_scaled_values = model.predict(prediction_input)[0] # Get the first (only) prediction -> [scaled_open, scaled_close]
+    predicted_scaled_values = model.predict(prediction_input)[0]
 
-    # 5. Inverse Transform
-    # Create a dummy array with the same number of features as the scaler was fit on
+    # 5. Inverse Transform (Logic remains the same)
     num_features = len(FEATURES)
     dummy_prediction = np.zeros((1, num_features))
-
-    # Place the predicted scaled values into the correct columns (Open and Close)
     open_index = FEATURES.index('Open')
     close_index = FEATURES.index('Close')
-    target_pred_indices = [FEATURES.index(f) for f in TARGET_FEATURES]
-
-    # Handle the order based on TARGET_FEATURES
     pred_map = {target: pred for target, pred in zip(TARGET_FEATURES, predicted_scaled_values)}
-
-    dummy_prediction[0, open_index] = pred_map.get('Open', 0) # Default to 0 if somehow not predicted
+    dummy_prediction[0, open_index] = pred_map.get('Open', 0)
     dummy_prediction[0, close_index] = pred_map.get('Close', 0)
-
-    # Inverse transform the dummy array
     predicted_values_unscaled = scaler.inverse_transform(dummy_prediction)[0]
-
-    # Extract the final predicted Open and Close prices
     predicted_open = predicted_values_unscaled[open_index]
     predicted_close = predicted_values_unscaled[close_index]
 
@@ -251,12 +258,7 @@ def predict_next_open_close(force_retrain=False):
 
 # --- How to Use ---
 if __name__ == '__main__':
-    # Example usage:
-    # To force retraining even if the model is recent:
-    # pred_open, pred_close = predict_next_open_close(force_retrain=True)
-
-    # Normal usage (retrains only if needed):
-    pred_open, pred_close = predict_next_open_close()
+    pred_open, pred_close = predict_next_open_close() # Uses new weighted training filenames
 
     if pred_open is not None and pred_close is not None:
         print(f"\n函數返回的預測價格: Open={pred_open:.2f}, Close={pred_close:.2f}")

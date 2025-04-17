@@ -2,7 +2,8 @@
 # price_prediction_v1.py
 # Description: LSTM Predictor for Open/Close prices, modified for multi-stock handling.
 #              Saves/Loads per-stock models and scalers. Returns scaler object.
-# Version: 1.1 (Multi-Stock Support + Return Scaler)
+#              Includes main block for initializing models for a stock list.
+# Version: 1.1 (Multi-Stock Support + Return Scaler + Initializer Main Block)
 
 import numpy as np
 import requests
@@ -19,7 +20,7 @@ except ImportError:
         from keras.layers import Dense, LSTM
         from keras.optimizers import Adam
     except ImportError:
-        print("CRITICAL ERROR: Cannot import Keras or TensorFlow.")
+        print("CRITICAL ERROR: Cannot import Keras or TensorFlow. Please ensure it is installed.")
         sys.exit(1) # Exit if essential libraries are missing
 import warnings
 import os
@@ -178,6 +179,7 @@ def train_and_save_model(stock_code, data):
     # 5. Train Model
     print(f"   ({stock_code}): Training LSTM for {EPOCHS} epochs...")
     try:
+        # Set verbose=1 or 2 to see training progress per epoch
         model.fit(X_train, y_train, batch_size=BATCH_SIZE, epochs=EPOCHS, verbose=0, sample_weight=sample_weights)
         print(f"   ({stock_code}): Training complete.")
     except Exception as e: print(f"ERROR ({stock_code}): Model training failed - {e}"); return None, None
@@ -185,7 +187,7 @@ def train_and_save_model(stock_code, data):
     # 6. Save Model, Scaler, Timestamp
     try:
         model.save(model_path); joblib.dump(scaler, scaler_path)
-        with open(timestamp_path, 'w') as f: f.write(datetime.datetime.now().isoformat())
+        with open(timestamp_path, 'w') as f: f.write(datetime.now().isoformat())
         print(f"[OK] LSTM ({stock_code}): Model saved to {model_path}, Scaler to {scaler_path}")
         return model, scaler # Return trained model and scaler
     except Exception as e: print(f"ERROR ({stock_code}): Failed saving - {e}"); return None, None
@@ -211,7 +213,7 @@ def predict_next_open_close(stock_code, force_retrain=False):
 
     # 1. Check Retraining Need
     print(f"   ({stock_code}): Checking retraining need...")
-    if force_retrain: print(f"   ({stock_code}): Force retraining."); retrain_needed = True
+    if force_retrain: print(f"   ({stock_code}): Force retraining enabled."); retrain_needed = True
     elif not all(os.path.exists(p) for p in [model_path, scaler_path, timestamp_path]): print(f"   ({stock_code}): Missing files. Training required."); retrain_needed = True
     else:
         try:
@@ -243,9 +245,11 @@ def predict_next_open_close(stock_code, force_retrain=False):
 
     # 3. Prepare Latest Data for Prediction
     print(f"   ({stock_code}): Preparing prediction input...")
-    if not retrain_needed: # Fetch latest data if not just trained
+    if not retrain_needed: # Fetch latest data only if not just trained
          ohlc_data = get_ohlc_data_for_stock(stock_code)
-         if ohlc_data is None: print(f"ERROR ({stock_code}): Failed getting latest data."); return None, None, scaler # Return loaded scaler on data fail
+         # Check if data fetch failed *after* loading model/scaler successfully
+         if ohlc_data is None: print(f"ERROR ({stock_code}): Failed getting latest data."); return None, None, scaler # Return loaded scaler
+    # Check data length after potential refetch
     if len(ohlc_data) < TIMESTEPS: print(f"ERROR ({stock_code}): Not enough data for prediction."); return None, None, scaler
 
     last_sequence_raw = ohlc_data[-TIMESTEPS:]
@@ -269,29 +273,82 @@ def predict_next_open_close(stock_code, force_retrain=False):
         if predicted_open is None or predicted_close is None: print(f"ERROR ({stock_code}): Failed extracting predictions."); return None, None, scaler
         print(f"[OK] LSTM ({stock_code}): Predicted Open={predicted_open:.2f}, Close={predicted_close:.2f}")
         # --- Return predictions AND the scaler used ---
-        return predicted_open, predicted_close, scaler # <<< MODIFIED RETURN >>>
+        return predicted_open, predicted_close, scaler # <<< RETURN SCALER HERE >>>
     except Exception as e: print(f"ERROR ({stock_code}): Inverse transform failed - {e}"); return None, None, scaler
 
-# === Main Execution Block (for testing this script directly) ===
+# === Main Execution Block (Modified for Initial Training of Stock List) ===
 if __name__ == '__main__':
-    print("\n--- LSTM Predictor Multi-Stock Test ---")
-    test_stocks = ["2330", "2317", "0050"] # Example stocks to test
+    print("="*40)
+    print("   LSTM Predictor - Initial Training for Stock List")
+    print("="*40)
+
+    stock_list_file = "stock_list.txt" # Make sure this file exists and is correct
+    target_stocks = []
+
+    # --- Load Stock List ---
+    print(f"Reading stock list from: {stock_list_file}")
+    try:
+        with open(stock_list_file, 'r', encoding='utf-8') as f:
+            content = f.read()
+            if content.startswith('\ufeff'): content = content[1:] # Handle BOM
+            target_stocks = [code.strip() for code in content.split(',') if code.strip().isdigit() and len(code.strip()) == 4]
+        if not target_stocks:
+            print(f"ERROR: No valid stock codes found in '{stock_list_file}'. Exiting.")
+            sys.exit(1)
+        print(f"[OK] Found {len(target_stocks)} stocks to process: {', '.join(target_stocks)}")
+    except FileNotFoundError:
+        print(f"CRITICAL ERROR: Stock list file '{stock_list_file}' not found. Exiting.")
+        sys.exit(1)
+    except Exception as e:
+        print(f"CRITICAL ERROR: Failed reading stock list '{stock_list_file}' - {e}. Exiting.")
+        sys.exit(1)
+
+    # --- Ensure Model Directory Exists ---
+    if not os.path.exists(MODEL_DIR):
+        print(f"Creating directory for models: {MODEL_DIR}")
+        os.makedirs(MODEL_DIR)
+
+    # --- Iterate and Train/Predict for each stock ---
+    print(f"\nStarting initial training/prediction loop for {len(target_stocks)} stocks...")
     results = {}
-    # Ensure model dir exists
-    if not os.path.exists(MODEL_DIR): os.makedirs(MODEL_DIR)
+    start_initial_train_time = time.time()
 
-    for code in test_stocks:
-        print("-" * 30)
-        # Example: Call with force_retrain=True for the first run perhaps
-        # pred_open, pred_close, used_scaler = predict_next_open_close(stock_code=code, force_retrain=True)
-        pred_open, pred_close, used_scaler = predict_next_open_close(stock_code=code)
-        results[code] = {"open": pred_open, "close": pred_close, "scaler_ok": used_scaler is not None}
-        time.sleep(0.5) # Small delay
+    for i, stock_code in enumerate(target_stocks):
+        print(f"\n--- Processing Stock {i+1}/{len(target_stocks)}: {stock_code} ---")
+        stock_start_time = time.time()
+        # --- Call predict function with force_retrain=True ---
+        # This will trigger train_and_save_model if needed or forced
+        pred_open, pred_close, used_scaler = predict_next_open_close(
+            stock_code=stock_code,
+            force_retrain=True # Force training/saving for initialization
+        )
+        # --- Store result ---
+        results[stock_code] = {"open": pred_open, "close": pred_close, "scaler_ok": used_scaler is not None}
+        stock_end_time = time.time()
+        print(f"--- Finished processing {stock_code} in {stock_end_time - stock_start_time:.2f} seconds ---")
+        # Optional small delay between stocks if API has limits
+        time.sleep(1) # Wait 1 second
 
-    print("\n--- Test Summary ---")
+    end_initial_train_time = time.time()
+    print("\n" + "="*40)
+    print("   Initial Training/Prediction Summary")
+    print("="*40)
+    successful_count = 0
+    failed_count = 0
     for code, res in results.items():
-        if res["open"] is not None:
-            print(f"Stock {code}: Predicted Open={res['open']:.2f}, Close={res['close']:.2f}, Scaler OK={res['scaler_ok']}")
+        if res["open"] is not None and res["scaler_ok"]:
+            print(f"Stock {code}: [SUCCESS] Predicted Open={res['open']:.2f}, Close={res['close']:.2f}")
+            successful_count += 1
         else:
-            print(f"Stock {code}: Prediction failed.")
-    print("\n--- LSTM Predictor Test Complete ---")
+            print(f"Stock {code}: [FAILED] Prediction or Scaler generation failed.")
+            failed_count += 1
+    print("-" * 40)
+    print(f"Total Stocks Processed: {len(target_stocks)}")
+    print(f"Successful Initializations: {successful_count}")
+    print(f"Failed Initializations: {failed_count}")
+    print(f"Total Initial Training Time: {end_initial_train_time - start_initial_train_time:.2f} seconds")
+    print("="*40)
+    print("\n--- LSTM Initial Training/Prediction Complete ---")
+    if failed_count > 0:
+        print("\nWARNING: Some stocks failed initialization. Check error messages above.")
+        print("         The agent might skip these stocks during trading execution.")

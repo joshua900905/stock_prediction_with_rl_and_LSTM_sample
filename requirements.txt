@@ -1,0 +1,26 @@
+# requirements.txt
+
+# Core numerical and data handling library
+numpy>=1.19.0,<2.0.0
+
+# Library for making HTTP requests to APIs
+requests>=2.25.0,<3.0.0
+
+# Scikit-learn for data preprocessing (MinMaxScaler) and potentially other ML tools
+scikit-learn>=0.24.0,<1.1.0 # Older versions might work, but >=0.24 is safer for recent features
+
+# Joblib for saving/loading Python objects efficiently (like the Scaler)
+joblib>=1.0.0,<2.0.0
+
+# Deep Learning Framework (Choose one - TensorFlow includes Keras)
+# Option 1: TensorFlow (Recommended - includes Keras)
+# Specify CPU or GPU version if needed, e.g., tensorflow-gpu
+tensorflow>=2.4.0,<2.12.0 # Specify a range compatible with your hardware/CUDA if using GPU
+
+# Option 2: Standalone Keras (Less common now, usually used with TF backend)
+# If you use this, you might also need to install a backend like tensorflow explicitly
+# keras>=2.4.0,<2.12.0
+
+# Optional: For reading configurations or advanced file handling (though not explicitly used in the provided snippets)
+# python-dotenv>=0.15.0 # If you use .env files for credentials
+# pandas>=1.2.0,<2.0.0 # If you decide to use DataFrames for data manipulation

@@ -161,7 +161,7 @@ def formatPrice(n): # <<< CORRECTED VERSION >>>
     except (TypeError, ValueError): return "N/A"
     except Exception as e: print(f"ERROR (formatPrice): Unexpected error - {e}"); return "N/A"
 def get_ohlc_data_for_stock(stock_code):
-    print(f"RL Agent: Fetching OHLC data for {stock_code}..."); features_to_get=['Open','High','Low','Close'] # Use correct case based on API
+    print(f"RL Agent: Fetching OHLC data for {stock_code}..."); features_to_get=['open','high','low','close'] # Use correct case based on API
     start_date=(datetime.now()-timedelta(days=730)).strftime('%Y%m%d'); end_date=datetime.now().strftime('%Y%m%d')
     stock_history=Get_Stock_Informations(stock_code,start_date,end_date)
     if not stock_history: print(f"ERROR (get_ohlc {stock_code}): Failed fetch."); return None

@@ -99,7 +99,7 @@ def Get_Stock_Informations(stock_code, start_date_str, end_date_str):
 def get_ohlc_data_for_stock(stock_code):
     """Fetches and preprocesses OHLC data for the specified stock."""
     print(f"LSTM ({stock_code}): Fetching historical OHLC data...")
-    start_date = (datetime.datetime.now() - timedelta(days=730)).strftime('%Y%m%d') # Fetch ~2 years
+    start_date = (datetime.datetime.now() - timedelta(days=2915)).strftime('%Y%m%d') # Fetch ~2 years
     end_date = datetime.datetime.now().strftime('%Y%m%d')
     stock_history_data_raw = Get_Stock_Informations(stock_code, start_date, end_date)
 
@@ -269,7 +269,7 @@ def predict_next_open_close(stock_code, force_retrain=False):
         for i, target_idx in enumerate(target_indices): dummy_prediction[0, target_idx] = predicted_scaled_values[i]
         predicted_values_unscaled = scaler.inverse_transform(dummy_prediction)[0]
         pred_map = {target: predicted_values_unscaled[FEATURES.index(target)] for target in TARGET_FEATURES}
-        predicted_open = pred_map.get('Open'); predicted_close = pred_map.get('Close')
+        predicted_open = pred_map.get('open'); predicted_close = pred_map.get('close')
         if predicted_open is None or predicted_close is None: print(f"ERROR ({stock_code}): Failed extracting predictions."); return None, None, scaler
         print(f"[OK] LSTM ({stock_code}): Predicted Open={predicted_open:.2f}, Close={predicted_close:.2f}")
         # --- Return predictions AND the scaler used ---

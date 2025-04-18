@@ -54,8 +54,8 @@ REQUEST_TIMEOUT = 25
 TRADE_INFO_FILE = f"trade_status_multi_fixed.json"
 STOP_LOSS_PERCENTAGE = 5.0
 # --- Account Info ---
-USER_ACCOUNT = "CIoT Bot-CE"     # <<< REPLACE >>>
-USER_PASSWORD = "CIoT Bot-CE"    # <<< REPLACE >>>
+USER_ACCOUNT = "N26132089"     # <<< REPLACE >>>
+USER_PASSWORD = "joshua900905"    # <<< REPLACE >>>
 TEAM_ACCOUNT_ID = "team1"        # <<< REPLACE >>>
 # --- RL Model (Generic) ---
 RL_MODEL_LOAD_PATH = "rl_agent_generic_ohlc_holding_delayed.h5" # <<< UPDATE to your trained model >>>

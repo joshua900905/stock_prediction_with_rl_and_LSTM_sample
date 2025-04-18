@@ -95,7 +95,7 @@ def test_get_daily_bargain_data():
         print("First record sample:")
         print(json.dumps(result[0], indent=2, ensure_ascii=False))
         # Check specifically for OHLC keys needed later
-        required_keys = ['Open', 'High', 'Low', 'Close', 'change']
+        required_keys = ['open', 'high', 'low', 'close', 'change']
         if all(key in result[0] for key in required_keys):
              print("[OK] Bargain data contains required OHLC and change keys.")
         else:

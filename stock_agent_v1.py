@@ -158,7 +158,7 @@ def formatPrice(n):
     try: return ("-" if n < 0 else "") + "NT${:,.2f}".format(abs(n)); 
     except: return "N/A"
 def get_ohlc_data_for_stock(stock_code):
-    print(f"RL Agent: Fetching OHLC data for {stock_code}..."); features_to_get=['Open','High','Low','Close']
+    print(f"RL Agent: Fetching OHLC data for {stock_code}..."); features_to_get=['open','high','low','close']
     start_date=(datetime.now()-timedelta(days=730)).strftime('%Y%m%d'); end_date=datetime.now().strftime('%Y%m%d')
     stock_history=Get_Stock_Informations(stock_code,start_date,end_date)
     if not stock_history: print(f"ERROR (get_ohlc {stock_code}): Failed fetch."); return None

@@ -99,8 +99,8 @@ def Get_Stock_Informations(stock_code, start_date_str, end_date_str):
 def get_ohlc_data_for_stock(stock_code):
     """Fetches and preprocesses OHLC data for the specified stock."""
     print(f"LSTM ({stock_code}): Fetching historical OHLC data...")
-    start_date = (datetime.now() - timedelta(days=730)).strftime('%Y%m%d') # Fetch ~2 years
-    end_date = datetime.now().strftime('%Y%m%d')
+    start_date = (datetime.datetime.now() - timedelta(days=730)).strftime('%Y%m%d') # Fetch ~2 years
+    end_date = datetime.datetime.now().strftime('%Y%m%d')
     stock_history_data_raw = Get_Stock_Informations(stock_code, start_date, end_date)
 
     if not stock_history_data_raw:
@@ -187,7 +187,7 @@ def train_and_save_model(stock_code, data):
     # 6. Save Model, Scaler, Timestamp
     try:
         model.save(model_path); joblib.dump(scaler, scaler_path)
-        with open(timestamp_path, 'w') as f: f.write(datetime.now().isoformat())
+        with open(timestamp_path, 'w') as f: f.write(datetime.datetime.now().isoformat())
         print(f"[OK] LSTM ({stock_code}): Model saved to {model_path}, Scaler to {scaler_path}")
         return model, scaler # Return trained model and scaler
     except Exception as e: print(f"ERROR ({stock_code}): Failed saving - {e}"); return None, None

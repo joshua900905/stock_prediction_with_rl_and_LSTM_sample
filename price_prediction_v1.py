@@ -42,8 +42,8 @@ TIMESTAMP_FILENAME_TPL = os.path.join(MODEL_DIR, "timestamp_{stock_code}.txt")
 # --- Training Parameters ---
 RETRAIN_INTERVAL_DAYS = 7   # How often to retrain each stock's model
 TIMESTEPS = 7               # LSTM input sequence length
-FEATURES = ['Open', 'High', 'Low', 'Close'] # Features to use from OHLC data
-TARGET_FEATURES = ['Open', 'Close']         # Features the LSTM predicts
+FEATURES = ['open', 'high', 'low', 'close'] # Features to use from OHLC data
+TARGET_FEATURES = ['open', 'close']         # Features the LSTM predicts
 USE_SAMPLE_WEIGHTING = True # Enable/disable time-based weighting
 MIN_SAMPLE_WEIGHT = 0.5     # Weight for oldest sample
 MAX_SAMPLE_WEIGHT = 1.5     # Weight for newest sample
